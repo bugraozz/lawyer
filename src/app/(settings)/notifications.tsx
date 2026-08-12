@@ -1,27 +1,65 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
-import { BrutalCard } from '../../components/BrutalCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useContext, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { BrutalButton } from '../../components/BrutalButton';
+import { BrutalCard } from '../../components/BrutalCard';
+import { AuthContext } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
+const DEFAULT_PREFS = {
+  pushMessages: true,
+  pushHearings: true,
+  pushTasks: false,
+  emailSummary: true,
+  smsAlerts: false,
+};
+
 export default function NotificationsScreen() {
-  const [prefs, setPrefs] = useState({
-    pushMessages: true,
-    pushHearings: true,
-    pushTasks: false,
-    emailSummary: true,
-    smsAlerts: false
-  });
+  const { user } = useContext(AuthContext);
+  const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+  const [loading, setLoading] = useState(true);
+
+  const storageKey = `@notification_prefs:${user?.id ?? 'guest'}`;
+
+  useEffect(() => {
+    const loadPrefs = async () => {
+      try {
+        const savedPrefs = await AsyncStorage.getItem(storageKey);
+        if (savedPrefs) {
+          setPrefs({ ...DEFAULT_PREFS, ...JSON.parse(savedPrefs) });
+        }
+      } catch (error) {
+        console.error('Failed to load notification prefs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPrefs();
+  }, [storageKey]);
 
   const toggleSwitch = (key: keyof typeof prefs) => {
     setPrefs(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSave = () => {
-    // In a real app, this would save to backend or AsyncStorage
-    Alert.alert('Başarılı', 'Bildirim tercihleriniz cihazınıza kaydedildi.');
+  const handleSave = async () => {
+    try {
+      await AsyncStorage.setItem(storageKey, JSON.stringify(prefs));
+      Alert.alert('Başarılı', 'Bildirim tercihleriniz kaydedildi.');
+    } catch (error) {
+      console.error('Failed to save notification prefs:', error);
+      Alert.alert('Hata', 'Bildirim tercihleri kaydedilemedi.');
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingState]}>
+        <ActivityIndicator size="large" color={colors.text.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -112,6 +150,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingState: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     padding: 24,

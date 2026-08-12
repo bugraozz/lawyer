@@ -40,7 +40,7 @@ export const BrutalButton: React.FC<BrutalButtonProps> = ({
         activeOpacity={0.8}
         {...props}
       >
-        <Text style={[styles.text, { color: textColor }]}>{title.toUpperCase()}</Text>
+        <Text style={[styles.text, { color: textColor }]}>{title.toLocaleUpperCase('tr-TR')}</Text>
       </TouchableOpacity>
     </View>
   );

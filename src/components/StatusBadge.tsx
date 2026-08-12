@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
-type StatusType = 'active' | 'success' | 'danger' | 'warning' | 'info' | 'default';
+type StatusType = 'active' | 'inactive' | 'success' | 'danger' | 'warning' | 'info' | 'default';
 
 interface StatusBadgeProps {
   label: string;
@@ -36,7 +36,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ label, status = 'defau
 
   return (
     <View style={[styles.badge, { backgroundColor: bgColor }, style]}>
-      <Text style={[styles.label, { color: textColor }]}>{label.toUpperCase()}</Text>
+      <Text style={[styles.label, { color: textColor }]}>{label.toLocaleUpperCase('tr-TR')}</Text>
     </View>
   );
 };

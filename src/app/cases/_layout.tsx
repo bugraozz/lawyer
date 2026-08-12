@@ -5,6 +5,7 @@ export default function CasesLayout() {
   return (
     <Stack
       screenOptions={{
+
         headerStyle: {
           backgroundColor: colors.background,
         },
@@ -13,8 +14,13 @@ export default function CasesLayout() {
         contentStyle: {
           backgroundColor: colors.background,
         },
+        headerBackTitleVisible: false,
       }}
     >
+      <Stack.Screen 
+        name="add" 
+        options={{ title: '' }} 
+      />
       <Stack.Screen 
         name="[id]/index" 
         options={{ title: 'Dava Detayı' }} 
@@ -32,8 +38,12 @@ export default function CasesLayout() {
         options={{ title: 'İş Birliği' }} 
       />
       <Stack.Screen 
-        name="[id]/messages" 
-        options={{ title: 'Mesajlaşma' }} 
+        name="[id]/expenses" 
+        options={{ title: 'Masraflar' }} 
+      />
+      <Stack.Screen 
+        name="[id]/hearings" 
+        options={{ title: 'Duruşmalar' }} 
       />
     </Stack>
   );

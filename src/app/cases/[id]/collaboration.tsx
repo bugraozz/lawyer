@@ -1,20 +1,150 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import apiClient from '../../../api/client';
+import { BrutalButton } from '../../../components/BrutalButton';
 import { BrutalCard } from '../../../components/BrutalCard';
 import { StatusBadge } from '../../../components/StatusBadge';
-import { BrutalButton } from '../../../components/BrutalButton';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
 
-const mockTeam = [
-  { id: '1', name: 'Av. Mehmet', role: 'Kıdemli Avukat', perm: 'Tam Yetki', online: true },
-  { id: '2', name: 'Av. Zeynep', role: 'Avukat', perm: 'Düzenleme', online: false },
-  { id: '3', name: 'Stj. Ali', role: 'Stajyer', perm: 'Okuma', online: true },
+const permissionLevels = [
+  { value: 'view', label: 'Okuma', color: colors.accent.blue },
+  { value: 'edit', label: 'Düzenleme', color: colors.accent.yellow },
+  { value: 'admin', label: 'Tam Yetki', color: colors.accent.green },
 ];
 
 export default function CaseCollaborationScreen() {
+  const { id } = useLocalSearchParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'ekip' | 'paylasim' | 'aktivite'>('ekip');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [activity, setActivity] = useState<any[]>([]);
+  const [shares, setShares] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedPermission, setSelectedPermission] = useState('view');
+
+  useEffect(() => {
+    loadData();
+  }, [id]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [teamRes, activityRes, sharesRes, usersRes] = await Promise.all([
+        apiClient.get(`/cases/${id}/collaborators`),
+        apiClient.get(`/cases/${id}/collaborators/activity`),
+        apiClient.get(`/cases/${id}/collaborators/shares`),
+        apiClient.get('/profile/company/users'),
+      ]);
+      setTeamMembers(teamRes.data || []);
+      setActivity(activityRes.data || []);
+      setShares(sharesRes.data || []);
+      setAllUsers(usersRes.data || []);
+    } catch (error) {
+      console.error('Failed to load collaboration data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!selectedUser) {
+      Alert.alert('Hata', 'Lütfen bir kullanıcı seçin');
+      return;
+    }
+    try {
+      await apiClient.post(`/cases/${id}/collaborators`, {
+        userId: selectedUser.id,
+        permissionLevel: selectedPermission,
+      });
+      setShowAddModal(false);
+      setSelectedUser(null);
+      setSelectedPermission('view');
+      loadData();
+    } catch (error: any) {
+      Alert.alert('Hata', error.response?.data?.error || 'Ekip üyesi eklenirken hata oluştu');
+    }
+  };
+
+  const handleRemoveMember = async (collaboratorId: number) => {
+    Alert.alert('Sil', 'Bu üyeyi davadan çıkarmak istediğinize emin misiniz?', [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Sil',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiClient.delete(`/cases/${id}/collaborators/${collaboratorId}`);
+            loadData();
+          } catch (error) {
+            Alert.alert('Hata', 'Üye kaldırılırken hata oluştu');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleUpdatePermission = async (collaboratorId: number, newPermission: string) => {
+    try {
+      await apiClient.put(`/cases/${id}/collaborators/${collaboratorId}`, {
+        permissionLevel: newPermission,
+      });
+      loadData();
+    } catch (error) {
+      Alert.alert('Hata', 'Yetki güncellenirken hata oluştu');
+    }
+  };
+
+  const handleShareCase = async () => {
+    if (!selectedUser) {
+      Alert.alert('Hata', 'Lütfen bir kullanıcı seçin');
+      return;
+    }
+    try {
+      await apiClient.post(`/cases/${id}/collaborators/shares`, {
+        userId: selectedUser.id,
+        permissionLevel: selectedPermission,
+      });
+      setShowShareModal(false);
+      setSelectedUser(null);
+      setSelectedPermission('view');
+      loadData();
+    } catch (error: any) {
+      Alert.alert('Hata', error.response?.data?.error || 'Dava paylaşılırken hata oluştu');
+    }
+  };
+
+  const handleRemoveShare = async (shareId: number) => {
+    Alert.alert('Paylaşımı Kaldır', 'Bu paylaşımı kaldırmak istediğinize emin misiniz?', [
+      { text: 'İptal', style: 'cancel' },
+      {
+        text: 'Kaldır',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await apiClient.delete(`/cases/${id}/collaborators/shares/${shareId}`);
+            loadData();
+          } catch (error) {
+            Alert.alert('Hata', 'Paylaşım kaldırılırken hata oluştu');
+          }
+        },
+      },
+    ]);
+  };
+
+  const getPermissionLabel = (level: string) => {
+    return permissionLevels.find(p => p.value === level)?.label || level;
+  };
+
+  const getPermissionColor = (level: string) => {
+    return permissionLevels.find(p => p.value === level)?.color || colors.text.secondary;
+  };
 
   return (
     <View style={styles.container}>
@@ -40,55 +170,260 @@ export default function CaseCollaborationScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {activeTab === 'ekip' && (
-          <View>
-            <BrutalButton title="EKİP ÜYESİ EKLE" fullWidth style={{ marginBottom: 24 }} />
-            
-            {mockTeam.map(member => (
-              <BrutalCard key={member.id} style={styles.memberCard}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{member.name.charAt(4)}</Text>
-                  {member.online && <View style={styles.onlineDot} />}
-                </View>
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>{member.name}</Text>
-                  <Text style={styles.memberRole}>{member.role}</Text>
-                </View>
-                <View style={styles.memberActions}>
-                  <StatusBadge label={member.perm} status={member.perm === 'Tam Yetki' ? 'active' : 'default'} style={{ marginBottom: 8 }} />
-                  <TouchableOpacity>
-                    <Text style={styles.actionLink}>Yetki Değiştir</Text>
-                  </TouchableOpacity>
-                </View>
-              </BrutalCard>
-            ))}
-          </View>
-        )}
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.text.primary} style={{ marginTop: 40 }} />
+        ) : (
+          <>
+            {activeTab === 'ekip' && (
+              <View>
+                <BrutalButton 
+                  title="EKİP ÜYESİ EKLE" 
+                  fullWidth 
+                  style={{ marginBottom: 24 }}
+                  onPress={() => setShowAddModal(true)}
+                />
+                
+                {teamMembers.length === 0 ? (
+                  <Text style={styles.emptyText}>Henüz ekip üyesi yok</Text>
+                ) : (
+                  teamMembers.map(member => (
+                    <BrutalCard key={member.id} style={styles.memberCard}>
+                      <View style={styles.memberHeader}>
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>{member.name.charAt(0)}</Text>
+                        </View>
+                        <View style={styles.memberInfo}>
+                          <Text style={styles.memberName}>{member.name}</Text>
+                          <Text style={styles.memberEmail}>{member.email}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.memberActions}>
+                        <StatusBadge 
+                          label={getPermissionLabel(member.permissionLevel)} 
+                          status={member.permissionLevel === 'admin' ? 'active' : 'default'}
+                        />
+                        <TouchableOpacity 
+                          onPress={() => {
+                            const nextLevel = member.permissionLevel === 'view' ? 'edit' : member.permissionLevel === 'edit' ? 'admin' : 'view';
+                            handleUpdatePermission(member.id, nextLevel);
+                          }}
+                        >
+                          <Text style={styles.actionLink}>Değiştir</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleRemoveMember(member.id)}>
+                          <MaterialIcons name="delete" size={20} color={colors.accent.red} />
+                        </TouchableOpacity>
+                      </View>
+                    </BrutalCard>
+                  ))
+                )}
+              </View>
+            )}
 
-        {activeTab === 'aktivite' && (
-          <View>
-            <View style={styles.timelineItem}>
-              <View style={styles.timelineLine} />
-              <View style={styles.timelineIcon}>
-                <MaterialIcons name="upload-file" size={16} color={colors.text.inverse} />
+            {activeTab === 'paylasim' && (
+              <View>
+                <BrutalButton 
+                  title="DAVAYI PAYLAŞ" 
+                  fullWidth 
+                  style={{ marginBottom: 24 }}
+                  onPress={() => setShowShareModal(true)}
+                />
+
+                {shares.length === 0 ? (
+                  <Text style={styles.emptyText}>Dava henüz kimse ile paylaşılmadı</Text>
+                ) : (
+                  shares.map(share => (
+                    <BrutalCard key={share.id} style={styles.memberCard}>
+                      <View style={styles.memberHeader}>
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>{share.name.charAt(0)}</Text>
+                        </View>
+                        <View style={styles.memberInfo}>
+                          <Text style={styles.memberName}>{share.name}</Text>
+                          <Text style={styles.memberEmail}>{share.email}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.memberActions}>
+                        <StatusBadge 
+                          label={getPermissionLabel(share.permissionLevel)} 
+                          status={share.permissionLevel === 'admin' ? 'active' : 'default'}
+                        />
+                        <TouchableOpacity onPress={() => handleRemoveShare(share.id)}>
+                          <MaterialIcons name="delete" size={20} color={colors.accent.red} />
+                        </TouchableOpacity>
+                      </View>
+                    </BrutalCard>
+                  ))
+                )}
               </View>
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineText}><Text style={{fontWeight: 'bold'}}>Stj. Ali</Text> "Bilirkişi Raporu.pdf" belgesini yükledi.</Text>
-                <Text style={styles.timelineTime}>Bugün, 14:30</Text>
+            )}
+
+            {activeTab === 'aktivite' && (
+              <View>
+                {activity.length === 0 ? (
+                  <Text style={styles.emptyText}>Henüz aktivite yok</Text>
+                ) : (
+                  activity.map((item, idx) => (
+                    <BrutalCard key={item.id} style={styles.activityCard}>
+                      <View style={styles.activityHeader}>
+                        <View style={[styles.activityIcon, { backgroundColor: getPermissionColor(item.actionType) }]}>
+                          <MaterialIcons 
+                            name={
+                              item.actionType.includes('upload') ? 'upload-file' :
+                              item.actionType.includes('note') ? 'note-add' :
+                              item.actionType.includes('team') ? 'group' : 'history'
+                            } 
+                            size={16} 
+                            color={colors.text.inverse} 
+                          />
+                        </View>
+                        <View style={styles.activityContent}>
+                          <Text style={styles.activityText}>
+                            <Text style={{ fontWeight: 'bold' }}>{item.userName}</Text> {item.actionDesc}
+                          </Text>
+                          <Text style={styles.activityTime}>{new Date(item.timestamp).toLocaleString('tr-TR')}</Text>
+                        </View>
+                      </View>
+                    </BrutalCard>
+                  ))
+                )}
               </View>
-            </View>
-            <View style={styles.timelineItem}>
-              <View style={styles.timelineIcon}>
-                <MaterialIcons name="note-add" size={16} color={colors.text.inverse} />
-              </View>
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineText}><Text style={{fontWeight: 'bold'}}>Av. Mehmet</Text> "Duruşma Notu" ekledi.</Text>
-                <Text style={styles.timelineTime}>Dün, 10:15</Text>
-              </View>
-            </View>
-          </View>
+            )}
+          </>
         )}
       </ScrollView>
+
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>EKİP ÜYESİ EKLE</Text>
+              <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <MaterialIcons name="close" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.userList}>
+              {allUsers.map(user => (
+                <TouchableOpacity
+                  key={user.id}
+                  style={[styles.userOption, selectedUser?.id === user.id && styles.userOptionSelected]}
+                  onPress={() => setSelectedUser(user)}
+                >
+                  <View style={styles.userOptionAvatar}>
+                    <Text style={styles.userOptionAvatarText}>{user.name?.charAt(0) || 'U'}</Text>
+                  </View>
+                  <View style={styles.userOptionInfo}>
+                    <Text style={styles.userOptionName}>{user.name || 'Kullanıcı'}</Text>
+                    <Text style={styles.userOptionEmail}>{user.email || '-'}</Text>
+                  </View>
+                  {selectedUser?.id === user.id && (
+                    <MaterialIcons name="check-circle" size={24} color={colors.accent.green} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedUser && (
+              <View style={styles.permissionSelector}>
+                <Text style={styles.permissionLabel}>Yetki Seviyesi:</Text>
+                <View style={styles.permissionButtons}>
+                  {permissionLevels.map(perm => (
+                    <TouchableOpacity
+                      key={perm.value}
+                      style={[
+                        styles.permButton,
+                        selectedPermission === perm.value && styles.permButtonActive,
+                      ]}
+                      onPress={() => setSelectedPermission(perm.value)}
+                    >
+                      <Text style={styles.permButtonText}>{perm.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <BrutalButton 
+              title="EKLE" 
+              fullWidth 
+              onPress={handleAddMember}
+              style={{ marginBottom: 12 }}
+            />
+            <BrutalButton 
+              title="İPTAL" 
+              fullWidth 
+              onPress={() => setShowAddModal(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showShareModal} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>DAVAYI PAYLAŞ</Text>
+              <TouchableOpacity onPress={() => setShowShareModal(false)}>
+                <MaterialIcons name="close" size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.userList}>
+              {allUsers.map(user => (
+                <TouchableOpacity
+                  key={user.id}
+                  style={[styles.userOption, selectedUser?.id === user.id && styles.userOptionSelected]}
+                  onPress={() => setSelectedUser(user)}
+                >
+                  <View style={styles.userOptionAvatar}>
+                    <Text style={styles.userOptionAvatarText}>{user.name?.charAt(0) || 'U'}</Text>
+                  </View>
+                  <View style={styles.userOptionInfo}>
+                    <Text style={styles.userOptionName}>{user.name || 'Kullanıcı'}</Text>
+                    <Text style={styles.userOptionEmail}>{user.email || '-'}</Text>
+                  </View>
+                  {selectedUser?.id === user.id && (
+                    <MaterialIcons name="check-circle" size={24} color={colors.accent.green} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {selectedUser && (
+              <View style={styles.permissionSelector}>
+                <Text style={styles.permissionLabel}>Yetki Seviyesi:</Text>
+                <View style={styles.permissionButtons}>
+                  {permissionLevels.map(perm => (
+                    <TouchableOpacity
+                      key={perm.value}
+                      style={[
+                        styles.permButton,
+                        selectedPermission === perm.value && styles.permButtonActive,
+                      ]}
+                      onPress={() => setSelectedPermission(perm.value)}
+                    >
+                      <Text style={styles.permButtonText}>{perm.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <BrutalButton 
+              title="PAYLAŞ" 
+              fullWidth 
+              onPress={handleShareCase}
+              style={{ marginBottom: 12 }}
+            />
+            <BrutalButton 
+              title="İPTAL" 
+              fullWidth 
+              onPress={() => setShowShareModal(false)}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -98,11 +433,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 24,
+    paddingTop: 64,
+    paddingBottom: 16,
+  },
+  backBtn: {
+    padding: 8,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginRight: 16,
+  },
+  title: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.xl,
+    color: colors.text.primary,
+  },
   tabsContainer: {
     flexDirection: 'row',
     borderBottomWidth: 3,
     borderBottomColor: colors.border,
-    paddingTop: 16,
     paddingHorizontal: 24,
   },
   tab: {
@@ -126,17 +479,27 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 48,
   },
+  emptyText: {
+    textAlign: 'center',
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    paddingVertical: 24,
+  },
   memberCard: {
+    marginBottom: 16,
+    padding: 16,
+  },
+  memberHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.surfaceVariant,
+    backgroundColor: colors.accent.yellow,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
@@ -148,17 +511,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.text.primary,
   },
-  onlineDot: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.accent.green,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
   memberInfo: {
     flex: 1,
   },
@@ -168,55 +520,155 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: 4,
   },
-  memberRole: {
+  memberEmail: {
     fontFamily: typography.fonts.body,
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
   },
   memberActions: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
   },
   actionLink: {
     fontFamily: typography.fonts.bodyBold,
     fontSize: typography.sizes.xs,
     color: colors.accent.blue,
   },
-  timelineItem: {
+  activityCard: {
+    marginBottom: 16,
+    padding: 16,
+  },
+  activityHeader: {
     flexDirection: 'row',
-    marginBottom: 24,
-    position: 'relative',
+    alignItems: 'flex-start',
   },
-  timelineLine: {
-    position: 'absolute',
-    left: 15,
-    top: 32,
-    bottom: -24,
-    width: 2,
-    backgroundColor: colors.border,
-  },
-  timelineIcon: {
+  activityIcon: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
-    zIndex: 2,
+    marginRight: 12,
   },
-  timelineContent: {
+  activityContent: {
     flex: 1,
-    paddingTop: 4,
   },
-  timelineText: {
+  activityText: {
     fontFamily: typography.fonts.body,
     fontSize: typography.sizes.sm,
     color: colors.text.primary,
     marginBottom: 4,
+    lineHeight: 20,
   },
-  timelineTime: {
+  activityTime: {
     fontFamily: typography.fonts.body,
     fontSize: typography.sizes.xs,
     color: colors.text.secondary,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '90%',
+    paddingTop: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.lg,
+    color: colors.text.primary,
+  },
+  userList: {
+    maxHeight: 300,
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  userOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: 8,
+  },
+  userOptionSelected: {
+    borderColor: colors.accent.green,
+    backgroundColor: colors.surface,
+  },
+  userOptionAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.accent.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  userOptionAvatarText: {
+    fontFamily: typography.fonts.headline,
+    fontSize: 16,
+    color: colors.text.primary,
+  },
+  userOptionInfo: {
+    flex: 1,
+  },
+  userOptionName: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+  },
+  userOptionEmail: {
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.xs,
+    color: colors.text.secondary,
+  },
+  permissionSelector: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  permissionLabel: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  permButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  permButtonActive: {
+    borderColor: colors.accent.yellow,
+    backgroundColor: colors.accent.yellow,
+  },
+  permButtonText: {
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.xs,
+    color: colors.text.primary,
   },
 });

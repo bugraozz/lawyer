@@ -1,145 +1,292 @@
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
 
-const db = new Database('lex_architect.db', { verbose: console.log });
+dotenv.config();
 
-export const initDb = () => {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      phone TEXT,
-      barNo TEXT,
-      password TEXT NOT NULL,
-      companyId INTEGER DEFAULT 1
-    );
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:1905@localhost:5432/avukat',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-    CREATE TABLE IF NOT EXISTS clients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      name TEXT NOT NULL,
-      email TEXT,
-      phone TEXT,
-      lastLogin TEXT,
-      status TEXT DEFAULT 'active',
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
+// A wrapper to convert SQLite's ? placeholders to PostgreSQL's $1, $2, etc.
+class DatabaseWrapper {
+  private convertSql(sql: string) {
+    let i = 1;
+    return sql.replace(/\?/g, () => `$${i++}`);
+  }
 
-    CREATE TABLE IF NOT EXISTS cases (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      clientId INTEGER,
-      caseNo TEXT NOT NULL,
-      title TEXT NOT NULL,
-      court TEXT,
-      status TEXT DEFAULT 'active',
-      type TEXT,
-      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(clientId) REFERENCES clients(id)
-    );
+  async query(sql: string, params: any[] = []) {
+    const pgSql = this.convertSql(sql);
+    const res = await pool.query(pgSql, params);
+    return res.rows;
+  }
 
-    CREATE TABLE IF NOT EXISTS events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      title TEXT NOT NULL,
-      type TEXT,
-      date TEXT NOT NULL,
-      time TEXT,
-      location TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
+  async execute(sql: string, params: any[] = []) {
+    const pgSql = this.convertSql(sql);
+    const res = await pool.query(pgSql, params);
+    return {
+      changes: res.rowCount || 0,
+      // Postgres RETURNING is needed for lastInsertRowid. 
+      // If the query has RETURNING id, it will be in res.rows[0].id
+      lastInsertRowid: res.rows.length > 0 ? res.rows[0].id : null
+    };
+  }
 
-    CREATE TABLE IF NOT EXISTS expenses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      title TEXT NOT NULL,
-      amount REAL NOT NULL,
-      date TEXT,
-      status TEXT DEFAULT 'pending',
-      isCompanyExpense INTEGER DEFAULT 0,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+  async get(sql: string, params: any[] = []) {
+    const pgSql = this.convertSql(sql);
+    const res = await pool.query(pgSql, params);
+    return res.rows[0];
+  }
 
-    CREATE TABLE IF NOT EXISTS hearings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      title TEXT NOT NULL,
-      date TEXT NOT NULL,
-      time TEXT,
-      location TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+  async run(sql: string, params: any[] = []) {
+    return this.execute(sql, params);
+  }
 
-    CREATE TABLE IF NOT EXISTS notes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      title TEXT NOT NULL,
-      content TEXT,
-      date TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+  async all(sql: string, params: any[] = []) {
+    return this.query(sql, params);
+  }
 
-    CREATE TABLE IF NOT EXISTS tasks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      title TEXT NOT NULL,
-      completed INTEGER DEFAULT 0,
-      date TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+  // To simulate db.prepare(sql).run(params) -> db.prepare(sql) returns an object with .run, .get, .all
+  prepare(sql: string) {
+    return {
+      run: async (...params: any[]) => this.run(sql, params),
+      get: async (...params: any[]) => this.get(sql, params),
+      all: async (...params: any[]) => this.all(sql, params),
+    };
+  }
 
-    CREATE TABLE IF NOT EXISTS documents (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      title TEXT NOT NULL,
-      size TEXT,
-      type TEXT,
-      date TEXT,
-      uploaderName TEXT,
-      filePath TEXT,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+  async exec(sql: string) {
+    return pool.query(sql);
+  }
+}
 
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      caseId INTEGER,
-      sender TEXT NOT NULL,
-      text TEXT NOT NULL,
-      time TEXT,
-      type TEXT DEFAULT 'user',
-      isMe INTEGER DEFAULT 0,
-      FOREIGN KEY(userId) REFERENCES users(id),
-      FOREIGN KEY(caseId) REFERENCES cases(id)
-    );
+const db = new DatabaseWrapper();
 
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER,
-      title TEXT NOT NULL,
-      desc TEXT,
-      time TEXT,
-      type TEXT,
-      unread INTEGER DEFAULT 1,
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
-  `);
-  
-  // Migrate existing databases if they don't have new columns
-  try { db.exec("ALTER TABLE documents ADD COLUMN filePath TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN companyId INTEGER DEFAULT 1"); } catch (e) {}
-  try { db.exec("ALTER TABLE expenses ADD COLUMN isCompanyExpense INTEGER DEFAULT 0"); } catch (e) {}
+export const initDb = async () => {
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        phone TEXT,
+        barNo TEXT,
+        password TEXT NOT NULL,
+        companyId INTEGER DEFAULT 1,
+        role TEXT DEFAULT 'lawyer',
+        status TEXT DEFAULT 'pending',
+        approvedBy INTEGER,
+        createdAt TIMESTAMP,
+        lastLogin TIMESTAMP,
+        pushToken TEXT,
+        FOREIGN KEY(approvedBy) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS clients (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        lastLogin TEXT,
+        status TEXT DEFAULT 'active',
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS cases (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        clientId INTEGER,
+        caseNo TEXT NOT NULL,
+        title TEXT NOT NULL,
+        court TEXT,
+        status TEXT DEFAULT 'active',
+        type TEXT,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(clientId) REFERENCES clients(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS events (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        title TEXT NOT NULL,
+        type TEXT,
+        date TEXT NOT NULL,
+        time TEXT,
+        location TEXT,
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        title TEXT NOT NULL,
+        amount REAL NOT NULL,
+        date TEXT,
+        status TEXT DEFAULT 'pending',
+        isCompanyExpense INTEGER DEFAULT 0,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS hearings (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT,
+        location TEXT,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        title TEXT NOT NULL,
+        content TEXT,
+        date TEXT,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        title TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        completedAt TIMESTAMP,
+        date TEXT,
+        priority TEXT DEFAULT 'normal',
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS documents (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        title TEXT NOT NULL,
+        size TEXT,
+        type TEXT,
+        date TEXT,
+        uploaderName TEXT,
+        filePath TEXT,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        caseId INTEGER,
+        sender TEXT NOT NULL,
+        text TEXT NOT NULL,
+        time TEXT,
+        type TEXT DEFAULT 'user',
+        isMe INTEGER DEFAULT 0,
+        FOREIGN KEY(userId) REFERENCES users(id),
+        FOREIGN KEY(caseId) REFERENCES cases(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        time TEXT,
+        type TEXT,
+        unread INTEGER DEFAULT 1,
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS caseCollaborators (
+        id SERIAL PRIMARY KEY,
+        caseId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        permissionLevel TEXT DEFAULT 'view',
+        dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(caseId) REFERENCES cases(id),
+        FOREIGN KEY(userId) REFERENCES users(id),
+        UNIQUE(caseId, userId)
+      );
+
+      CREATE TABLE IF NOT EXISTS caseActivity (
+        id SERIAL PRIMARY KEY,
+        caseId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        actionType TEXT NOT NULL,
+        actionDesc TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(caseId) REFERENCES cases(id),
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS caseShares (
+        id SERIAL PRIMARY KEY,
+        caseId INTEGER NOT NULL,
+        sharedWithUserId INTEGER NOT NULL,
+        permissionLevel TEXT DEFAULT 'view',
+        dateShared TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(caseId) REFERENCES cases(id),
+        FOREIGN KEY(sharedWithUserId) REFERENCES users(id),
+        UNIQUE(caseId, sharedWithUserId)
+      );
+
+      CREATE TABLE IF NOT EXISTS invitationCodes (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        code TEXT UNIQUE NOT NULL,
+        used INTEGER DEFAULT 0,
+        usedBy INTEGER,
+        expiresAt TIMESTAMP NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(usedBy) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS auditLog (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        ipAddress TEXT,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS passwordResetTokens (
+        id SERIAL PRIMARY KEY,
+        userId INTEGER NOT NULL,
+        code TEXT UNIQUE NOT NULL,
+        used INTEGER DEFAULT 0,
+        expiresAt TIMESTAMP NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(userId) REFERENCES users(id)
+      );
+    `);
+    
+    // Initialize first admin if none exists
+    const adminCount = await db.prepare('SELECT COUNT(*) as count FROM users WHERE role = ?').get('admin') as any;
+    if (parseInt(adminCount.count) === 0) {
+      const hashedPassword = require('bcryptjs').hashSync('admin123', 10);
+      await db.prepare('INSERT INTO users (name, email, password, role, status, companyId) VALUES (?, ?, ?, ?, ?, ?)').run(
+        'Admin Kullanıcısı',
+        'admin@bureau.local',
+        hashedPassword,
+        'admin',
+        'approved',
+        1
+      );
+      console.log('✅ İlk admin hesabı oluşturuldu: admin@bureau.local / admin123');
+    }
+  } catch (e) {
+    console.log('Admin initialization:', e);
+  }
 };
 
 export default db;

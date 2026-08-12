@@ -8,24 +8,31 @@ import { View, Text, ActivityIndicator } from 'react-native';
 import { colors } from '../theme/colors';
 import { AuthProvider, AuthContext } from '../context/AuthContext';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
-  const { token, loading } = useContext(AuthContext);
+  const { token, user, loading } = useContext(AuthContext);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'index';
+    const inAuthGroup = segments[0] === '(auth)' || String(segments[0]) === 'index';
 
     if (!token && !inAuthGroup) {
       // Redirect to the login page.
       router.replace('/(auth)/login');
     } else if (token && inAuthGroup) {
-      // Redirect away from the login page.
-      router.replace('/(tabs)');
+      if (user?.role === 'admin') {
+        router.replace('/admin');
+      } else {
+        router.replace('/(tabs)');
+      }
     }
   }, [token, segments, loading]);
 
@@ -44,13 +51,20 @@ function RootLayoutNav() {
         headerTintColor: colors.primary,
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.background },
+        headerBackTitleVisible: false,
       }}
     >
       <ExpoStack.Screen name="index" options={{ headerShown: false }} />
       <ExpoStack.Screen name="(auth)" options={{ headerShown: false }} />
       <ExpoStack.Screen name="(tabs)" options={{ headerShown: false }} />
       <ExpoStack.Screen name="(settings)" options={{ headerShown: false }} />
+      <ExpoStack.Screen name="admin" options={{ title: '' }} />
       <ExpoStack.Screen name="cases" options={{ headerShown: false }} />
+      <ExpoStack.Screen name="expenses" options={{ title: '' }} />
+      <ExpoStack.Screen name="client-portal" options={{ title: '' }} />
+      <ExpoStack.Screen name="tasks/add" options={{ title: '' }} />
+      <ExpoStack.Screen name="tasks/index" options={{ headerShown: false }} />
+      <ExpoStack.Screen name="calendar/add" options={{ title: 'Yeni Randevu' }} />
     </ExpoStack>
   );
 }
@@ -75,8 +89,10 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

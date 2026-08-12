@@ -1,13 +1,13 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
-import { useRouter, Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
+import { useContext, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import apiClient from '../../api/client';
+import { BrutalButton } from '../../components/BrutalButton';
 import { BrutalCard } from '../../components/BrutalCard';
 import { BrutalInput } from '../../components/BrutalInput';
-import { BrutalButton } from '../../components/BrutalButton';
+import { AuthContext } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { AuthContext } from '../../context/AuthContext';
-import apiClient from '../../api/client';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -63,7 +63,9 @@ export default function LoginScreen() {
           />
 
           <View style={styles.forgotPasswordContainer}>
-            <Text style={styles.linkText}>Şifremi Unuttum</Text>
+            <Link href="/(auth)/forgot-password">
+              <Text style={styles.linkText}>Şifremi Unuttum</Text>
+            </Link>
           </View>
 
           <BrutalButton 

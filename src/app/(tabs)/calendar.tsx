@@ -46,8 +46,28 @@ export default function CalendarScreen() {
 
   const loadEvents = async () => {
     try {
-      const res = await apiClient.get('/events');
-      setEvents(res.data);
+      const [eventsRes, hearingsRes] = await Promise.all([
+        apiClient.get('/events'),
+        apiClient.get('/events/all-hearings')
+      ]);
+
+      const mappedHearings = hearingsRes.data.map((h: any) => ({
+        ...h,
+        type: 'Duruşma', // badge için Duruşma etiketi
+        source: 'hearing',
+        title: h.caseTitle ? `${h.title} (${h.caseTitle})` : h.title
+      }));
+
+      const combined = [...eventsRes.data, ...mappedHearings];
+      // tarihe ve saate göre sırala
+      combined.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return (a.time || '').localeCompare(b.time || '');
+      });
+
+      setEvents(combined);
     } catch (error) {
       console.error('Failed to load events:', error);
     } finally {
@@ -55,13 +75,17 @@ export default function CalendarScreen() {
     }
   };
 
-  const deleteEvent = async (id: number) => {
+  const deleteEvent = async (item: any) => {
+    if (item.source === 'hearing') {
+      Alert.alert('Hata', 'Duruşmaları ajandadan silemezsiniz. Lütfen ilgili dava sayfasına giderek duruşmayı siliniz.');
+      return;
+    }
     Alert.alert('Etkinliği Sil', 'Bu etkinliği silmek istediğinize emin misiniz?', [
       { text: 'İptal', style: 'cancel' },
       {
         text: 'Sil', style: 'destructive', onPress: async () => {
           try {
-            await apiClient.delete(`/events/${id}`);
+            await apiClient.delete(`/events/${item.id}`);
             loadEvents();
           } catch (err) { console.error(err); }
         }
@@ -73,8 +97,13 @@ export default function CalendarScreen() {
   const eventDatesMap: Record<string, any[]> = {};
   events.forEach(ev => {
     if (ev.date) {
-      if (!eventDatesMap[ev.date]) eventDatesMap[ev.date] = [];
-      eventDatesMap[ev.date].push(ev);
+      let dStr = ev.date;
+      if (dStr.includes('.')) {
+        const parts = dStr.split('.');
+        if (parts.length === 3) dStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      if (!eventDatesMap[dStr]) eventDatesMap[dStr] = [];
+      eventDatesMap[dStr].push(ev);
     }
   });
 
@@ -126,24 +155,54 @@ export default function CalendarScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: any }) => (
-    <BrutalCard style={styles.eventCard}>
-      <View style={styles.timeCol}>
-        <Text style={styles.timeText}>{item.time || 'Tüm Gün'}</Text>
-        <Text style={styles.timeLabel}>{item.date}</Text>
-      </View>
-      <View style={styles.eventDetails}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-          <StatusBadge label={item.type?.toUpperCase() || 'ETKİNLİK'} status={item.type === 'Duruşma' ? 'danger' : 'warning'} />
-          <TouchableOpacity onPress={() => deleteEvent(item.id)}>
-            <MaterialIcons name="close" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
+  const renderItem = ({ item }: { item: any }) => {
+    const isHearing = item.source === 'hearing';
+    const stripColor = isHearing ? colors.accent.red : colors.accent.blue;
+
+    return (
+      <View style={[styles.neoEventCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+        {/* Left Color Strip */}
+        <View style={[styles.neoEventStrip, { backgroundColor: stripColor }]} />
+
+        <View style={styles.neoEventContent}>
+          {/* Top Row: Time Tag & Actions */}
+          <View style={styles.neoEventTopRow}>
+            <View style={styles.neoTimeTag}>
+              <MaterialIcons name="schedule" size={16} color={colors.text.primary} />
+              <Text style={styles.neoTimeText}>
+                {item.time ? item.time : 'TÜM GÜN'}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <StatusBadge label={item.type?.toLocaleUpperCase('tr-TR') || 'ETKİNLİK'} status={isHearing ? 'danger' : 'warning'} />
+              <TouchableOpacity onPress={() => deleteEvent(item)} style={styles.neoDeleteBtn}>
+                <MaterialIcons name="delete-outline" size={20} color={colors.text.secondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.neoEventTitle}>{item.title}</Text>
+          {item.caseNo ? <Text style={styles.neoEventCaseNo}>ESAS NO: {item.caseNo}</Text> : null}
+
+          {/* Location & Date */}
+          <View style={styles.neoEventFooter}>
+            <View style={styles.neoFooterItem}>
+              <MaterialIcons name="event" size={14} color={colors.text.secondary} />
+              <Text style={styles.neoFooterText}>{item.date}</Text>
+            </View>
+            {item.location ? (
+              <View style={styles.neoFooterItem}>
+                <MaterialIcons name="location-on" size={14} color={colors.text.secondary} />
+                <Text style={styles.neoFooterText}>{item.location}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-        <Text style={styles.eventTitle}>{item.title}</Text>
-        {item.location ? <Text style={styles.eventLocation}>{item.location}</Text> : null}
       </View>
-    </BrutalCard>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -157,7 +216,7 @@ export default function CalendarScreen() {
         <FlatList
           data={filteredEvents}
           renderItem={renderItem}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={(item, index) => item?.id ? `${item.source || 'event'}-${item.id}` : String(index)}
           contentContainerStyle={styles.content}
           onRefresh={loadEvents}
           refreshing={loading}
@@ -368,46 +427,78 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.accent.blue,
   },
-  eventCard: {
-    flexDirection: 'row',
-    padding: 0,
+  neoEventCard: {
+    borderWidth: 3,
+    borderBottomWidth: 6,
+    borderRightWidth: 6,
+    borderRadius: 0,
     marginBottom: 16,
+    flexDirection: 'row',
   },
-  timeCol: {
-    width: 80,
-    borderRightWidth: 3,
-    borderRightColor: colors.border,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceVariant,
+  neoEventStrip: {
+    width: 8,
   },
-  timeText: {
-    fontFamily: typography.fonts.headline,
-    fontSize: typography.sizes.sm,
-    color: colors.text.primary,
-  },
-  timeLabel: {
-    fontFamily: typography.fonts.body,
-    fontSize: typography.sizes.xs,
-    color: colors.text.secondary,
-  },
-  eventDetails: {
+  neoEventContent: {
     flex: 1,
     padding: 16,
+    paddingLeft: 20,
+  },
+  neoEventTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  eventTitle: {
-    fontFamily: typography.fonts.headline,
-    fontSize: typography.sizes.md,
+  neoTimeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  neoTimeText: {
+    fontFamily: typography.fonts.label,
+    fontSize: typography.sizes.xs,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
     color: colors.text.primary,
-    marginTop: 8,
-    marginBottom: 4,
   },
-  eventLocation: {
+  neoDeleteBtn: {
+    padding: 4,
+  },
+  neoEventTitle: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.lg,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    color: colors.text.primary,
+    marginBottom: 8,
+  },
+  neoEventCaseNo: {
     fontFamily: typography.fonts.body,
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
+    marginBottom: 8,
+  },
+  neoEventFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  neoFooterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  neoFooterText: {
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    fontWeight: '500',
   },
   emptyContainer: {
     alignItems: 'center',

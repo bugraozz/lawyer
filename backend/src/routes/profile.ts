@@ -1,14 +1,14 @@
-import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { Router } from 'express';
 import db from '../db';
 
 const router = Router();
 
 // Get current user profile
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const stmt = db.prepare('SELECT id, name, email, phone, barNo FROM users WHERE id = ?');
-    const user = stmt.get(req.user.id);
+    const stmt = await db.prepare('SELECT id, name, email, phone, barNo FROM users WHERE id = ?');
+    const user = await stmt.get(req.user.id);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -21,11 +21,11 @@ router.get('/', (req, res) => {
 });
 
 // Update profile details
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   const { name, phone, barNo } = req.body;
   try {
-    const stmt = db.prepare('UPDATE users SET name = ?, phone = ?, barNo = ? WHERE id = ?');
-    const info = stmt.run(name, phone, barNo, req.user.id);
+    const stmt = await db.prepare('UPDATE users SET name = ?, phone = ?, barNo = ? WHERE id = ?');
+    const info = await stmt.run(name, phone, barNo, req.user.id);
     
     if (info.changes === 0) {
       return res.status(404).json({ error: 'User not found' });
@@ -41,8 +41,8 @@ router.put('/', (req, res) => {
 router.put('/password', async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   try {
-    const stmt = db.prepare('SELECT password FROM users WHERE id = ?');
-    const user = stmt.get(req.user.id) as any;
+    const stmt = await db.prepare('SELECT password FROM users WHERE id = ?');
+    const user = await stmt.get(req.user.id) as any;
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -56,8 +56,34 @@ router.put('/password', async (req, res) => {
     
     // Hash new password and update
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, req.user.id);
+    await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, req.user.id);
     
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all users in company
+router.get('/company/users', async (req, res) => {
+  try {
+    const stmt = await db.prepare(`
+      SELECT id, name, email FROM users 
+      WHERE companyId = (SELECT companyId FROM users WHERE id = ?)
+      ORDER BY name ASC
+    `);
+    const users = await stmt.all(req.user.id);
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Save push token
+router.post('/push-token', async (req, res) => {
+  const { token } = req.body;
+  try {
+    await db.prepare('UPDATE users SET pushToken = ? WHERE id = ?').run(token, req.user.id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });

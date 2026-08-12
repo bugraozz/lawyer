@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useContext, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BrutalCard } from '../../components/BrutalCard';
+import { AuthContext } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
 export default function AppearanceScreen() {
+  const { user } = useContext(AuthContext);
   const [selectedTheme, setSelectedTheme] = useState('brutalist');
+  const [loading, setLoading] = useState(true);
+
+  const storageKey = `@appearance_theme:${user?.id ?? 'guest'}`;
 
   const themes = [
     { id: 'brutalist', name: 'Neo-Brutalist (Aktif)', desc: 'Kalın çizgiler, canlı renkler ve modern tasarım.' },
@@ -14,13 +20,44 @@ export default function AppearanceScreen() {
     { id: 'dark', name: 'Gece Modu', desc: 'Göz yormayan koyu renk paleti.' }
   ];
 
-  const handleSelect = (id: string) => {
-    if (id !== 'brutalist') {
-      Alert.alert('Bilgi', 'Diğer temalar yakında eklenecektir. Şu anda sadece Neo-Brutalist tema kullanılabilir.');
-      return;
-    }
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await AsyncStorage.getItem(storageKey);
+        if (savedTheme) {
+          setSelectedTheme(savedTheme);
+        }
+      } catch (error) {
+        console.error('Failed to load theme preference:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadTheme();
+  }, [storageKey]);
+
+  const handleSelect = async (id: string) => {
     setSelectedTheme(id);
+
+    try {
+      await AsyncStorage.setItem(storageKey, id);
+      if (id !== 'brutalist') {
+        Alert.alert('Bilgi', 'Tema seçiminiz kaydedildi. Uygulamanın genel tema motoru şu anda tek tema ile çalışıyor.');
+      }
+    } catch (error) {
+      console.error('Failed to save theme preference:', error);
+      Alert.alert('Hata', 'Tema tercihi kaydedilemedi.');
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingState]}>
+        <ActivityIndicator size="large" color={colors.text.primary} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -66,6 +103,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingState: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     padding: 24,

@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useContext, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useContext, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import apiClient from '../../api/client';
 import { BrutalCard } from '../../components/BrutalCard';
@@ -15,13 +16,16 @@ export default function DashboardScreen() {
   const { user } = useContext(AuthContext);
   const [stats, setStats] = useState({ activeCases: 0, upcomingHearings: 0, clientsCount: 0, tasksCount: 0 });
   const [nextHearing, setNextHearing] = useState<any>(null);
+  const [upcomingItems, setUpcomingItems] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const loadData = async () => {
     try {
@@ -31,6 +35,7 @@ export default function DashboardScreen() {
       ]);
       setStats(dashRes.data.stats);
       setNextHearing(dashRes.data.nextHearing);
+      setUpcomingItems(upcomingRes.data);
       setRecentActivity(dashRes.data.recentActivity);
 
       // Setup push notifications
@@ -44,6 +49,46 @@ export default function DashboardScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const getDaysLeftCount = (dateStr: string): number => {
+    if (!dateStr) return 999;
+    let dStr = dateStr;
+    if (dStr.includes('.')) {
+      const parts = dStr.split('.');
+      if (parts.length === 3) dStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    const targetDate = new Date(dStr);
+    targetDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = targetDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const formatHearingDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    let dStr = dateStr;
+    if (dStr.includes('.')) {
+      const parts = dStr.split('.');
+      if (parts.length === 3) dStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    const targetDate = new Date(dStr);
+    targetDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffTime = targetDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'BUGÜN';
+    if (diffDays === 1) return 'YARIN';
+
+    const d = targetDate;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
   };
 
   return (
@@ -71,11 +116,11 @@ export default function DashboardScreen() {
               <Text style={styles.statLabel}>Aktif Davalar</Text>
             </BrutalCard>
           </TouchableOpacity>
-          <TouchableOpacity style={{ width: '48%' }} onPress={() => router.push('/calendar')}>
+          <TouchableOpacity style={{ width: '48%' }} onPress={() => router.push('/hearings')}>
             <BrutalCard style={styles.statCard}>
               <MaterialIcons name="gavel" size={32} color={colors.accent.red} />
               <Text style={styles.statValue}>{stats.upcomingHearings}</Text>
-              <Text style={styles.statLabel}>Duruşmalar</Text>
+              <Text style={styles.statLabel}>Duruşma ve Süre Takibi</Text>
             </BrutalCard>
           </TouchableOpacity>
           <TouchableOpacity style={{ width: '48%' }} onPress={() => router.push('/tasks')}>
@@ -83,13 +128,6 @@ export default function DashboardScreen() {
               <MaterialIcons name="assignment" size={32} color={colors.accent.yellow} />
               <Text style={styles.statValue}>{stats.tasksCount}</Text>
               <Text style={styles.statLabel}>Görevler</Text>
-            </BrutalCard>
-          </TouchableOpacity>
-          <TouchableOpacity style={{ width: '48%' }} onPress={() => router.push('/client-portal')}>
-            <BrutalCard style={styles.statCard}>
-              <MaterialIcons name="people" size={32} color={colors.text.primary} />
-              <Text style={styles.statValue}>{stats.clientsCount}</Text>
-              <Text style={styles.statLabel}>Müvekkiller</Text>
             </BrutalCard>
           </TouchableOpacity>
         </View>
@@ -102,6 +140,10 @@ export default function DashboardScreen() {
           <MaterialIcons name="add" size={24} color={colors.text.primary} />
           <Text style={styles.actionText}>Yeni Dava</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/tasks/add')}>
+          <MaterialIcons name="assignment" size={24} color={colors.text.primary} />
+          <Text style={styles.actionText}>Yeni Görev</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/calendar/add')}>
           <MaterialIcons name="event" size={24} color={colors.text.primary} />
           <Text style={styles.actionText}>Randevu</Text>
@@ -110,18 +152,41 @@ export default function DashboardScreen() {
           <MaterialIcons name="receipt" size={24} color={colors.text.primary} />
           <Text style={styles.actionText}>Masraflar</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/client-portal')}>
-          <MaterialIcons name="people" size={24} color={colors.text.primary} />
-          <Text style={styles.actionText}>Müvekkil</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Upcoming Hearings */}
       <Text style={styles.sectionTitle}>YAKLAŞAN DURUŞMALAR</Text>
-      {nextHearing ? (
+      {upcomingItems.filter(item => getDaysLeftCount(item.date) <= 3 && item.source === 'hearing').length > 0 ? (
+        upcomingItems.filter(item => getDaysLeftCount(item.date) <= 3 && item.source === 'hearing').map((item, index) => (
+          <BrutalCard key={index} style={styles.hearingCard}>
+            <View style={styles.hearingHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialIcons name={item.source === 'hearing' ? 'gavel' : 'warning'} size={20} color={colors.accent.red} />
+                <Text style={[styles.hearingDate, { color: colors.accent.red, marginLeft: 8 }]}>
+                  {formatHearingDate(item.date)}{item.time ? ` ${item.time}` : ''}
+                </Text>
+              </View>
+              <StatusBadge label={item.source === 'hearing' ? 'DURUŞMA' : 'ACİL SÜRE'} status="error" />
+            </View>
+            <Text style={styles.hearingTitle}>{item.title}</Text>
+            <Text style={styles.hearingSubtitle}>{item.caseTitle ? `Dava: ${item.caseTitle}` : (item.location || item.caseNo || 'Konum belirtilmedi')}</Text>
+            <TouchableOpacity 
+              style={[styles.detailBtn, { backgroundColor: colors.accent.red }]}
+              onPress={() => {
+                if (item.caseId) router.push(`/cases/${item.caseId}`);
+              }}
+            >
+              <Text style={styles.detailBtnText}>DETAY</Text>
+            </TouchableOpacity>
+          </BrutalCard>
+        ))
+      ) : nextHearing ? (
         <BrutalCard style={styles.hearingCard}>
           <View style={styles.hearingHeader}>
-            <Text style={styles.hearingDate}>{nextHearing.date}{nextHearing.time ? `, ${nextHearing.time}` : ''}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <MaterialIcons name="gavel" size={20} color={colors.text.primary} />
+              <Text style={[styles.hearingDate, { marginLeft: 8 }]}>{formatHearingDate(nextHearing.date)}{nextHearing.time ? ` ${nextHearing.time}` : ''}</Text>
+            </View>
             <StatusBadge label="YAKLAŞIYOR" status="warning" />
           </View>
           <Text style={styles.hearingTitle}>{nextHearing.title}</Text>

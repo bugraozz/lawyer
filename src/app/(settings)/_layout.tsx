@@ -14,6 +14,7 @@ export default function SettingsLayout() {
           fontFamily: 'Inter-Bold',
         },
         headerShadowVisible: false,
+        headerBackTitleVisible: false,
       }}
     >
       <Stack.Screen name="account" options={{ title: 'Hesap Bilgileri' }} />

@@ -1,12 +1,12 @@
-import React, { useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { BrutalCard } from '../../components/BrutalCard';
+import { useRouter } from 'expo-router';
+import { useContext } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BrutalButton } from '../../components/BrutalButton';
+import { BrutalCard } from '../../components/BrutalCard';
+import { AuthContext } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { AuthContext } from '../../context/AuthContext';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -34,9 +34,19 @@ export default function ProfileScreen() {
       <Text style={styles.sectionTitle}>AYARLAR</Text>
       
       <View style={styles.menuContainer}>
+        {user?.role === 'admin' && (
+          <TouchableOpacity 
+            style={[styles.menuItem, { backgroundColor: colors.accent.yellow }]}
+            onPress={() => router.push('/admin')}
+          >
+            <MaterialIcons name="admin-panel-settings" size={24} color={colors.text.primary} />
+            <Text style={[styles.menuText, { fontFamily: typography.fonts.headline }]}>Admin Paneli</Text>
+            <MaterialIcons name="chevron-right" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+        )}
         {[
           { icon: 'receipt', label: 'Masraf ve Makbuzlar', route: '/expenses' },
-          { icon: 'people', label: 'Müvekkil Portalı', route: '/client-portal' },
+          { icon: 'people', label: 'Müvekkiller', route: '/client-portal' },
           { icon: 'person-outline', label: 'Hesap Bilgileri', route: '/(settings)/account' },
           { icon: 'notifications-none', label: 'Bildirim Tercihleri', route: '/(settings)/notifications' },
           { icon: 'security', label: 'Güvenlik ve Şifre', route: '/(settings)/security' },

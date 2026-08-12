@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = 'super_secret_lex_architect_key_change_in_prod';
@@ -25,6 +25,6 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     req.user = verified;
     next();
   } catch (err) {
-    res.status(403).json({ error: 'Invalid or expired token.' });
+    res.status(401).json({ error: 'Invalid or expired token.' });
   }
 };

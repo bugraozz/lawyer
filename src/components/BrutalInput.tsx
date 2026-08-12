@@ -1,8 +1,8 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import React from 'react';
-import { View, TextInput, Text, StyleSheet, TextInputProps } from 'react-native';
+import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
-import { MaterialIcons } from '@expo/vector-icons';
 
 interface BrutalInputProps extends TextInputProps {
   label?: string;
@@ -32,6 +32,7 @@ export const BrutalInput: React.FC<BrutalInputProps> = ({
         <TextInput
           style={[styles.input, style]}
           placeholderTextColor={colors.text.secondary}
+          selectionColor={colors.accent.blue}
           {...props}
         />
       </View>

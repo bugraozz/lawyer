@@ -18,11 +18,12 @@ export default function RegisterScreen() {
   const [barNo, setBarNo] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [invitationCode, setInvitationCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !email || !password) {
-      Alert.alert('Hata', 'Lütfen Ad, E-posta ve Şifre alanlarını doldurun.');
+    if (!name || !email || !password || !invitationCode) {
+      Alert.alert('Hata', 'Lütfen Ad, E-posta, Şifre ve Davetiye Kodu alanlarını doldurun.');
       return;
     }
     if (password !== passwordConfirm) {
@@ -32,14 +33,19 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      const res = await apiClient.post('/auth/register', {
+      await apiClient.post('/auth/register', {
         name,
         email,
         phone,
         barNo,
-        password
+        password,
+        invitationCode
       });
-      await login(res.data.token, res.data.user);
+      Alert.alert(
+        'Kayıt Başarılı',
+        'Hesabınız oluşturuldu. Admin onayından sonra giriş yapabilirsiniz.',
+        [{ text: 'Tamam', onPress: () => router.replace('/(auth)/login') }]
+      );
     } catch (err: any) {
       Alert.alert('Hata', err.response?.data?.error || 'Kayıt işlemi başarısız oldu.');
     } finally {
@@ -106,6 +112,14 @@ export default function RegisterScreen() {
             value={passwordConfirm}
             onChangeText={setPasswordConfirm}
             secureTextEntry
+          />
+          <BrutalInput
+            label="Davetiye Kodu"
+            icon="vpn-key"
+            placeholder="Admin'den aldığınız kod"
+            value={invitationCode}
+            onChangeText={setInvitationCode}
+            autoCapitalize="characters"
           />
 
           <View style={styles.termsContainer}>

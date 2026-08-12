@@ -1,8 +1,16 @@
-import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Redirect, Tabs } from 'expo-router';
+import { useContext } from 'react';
+import { AuthContext } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 
 export default function TabLayout() {
+  const { user } = useContext(AuthContext);
+  
+  if (user?.role === 'admin') {
+    return <Redirect href="/admin" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -42,8 +50,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Bildirimler',
-          tabBarIcon: ({ color }) => <MaterialIcons name="notifications" size={24} color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -58,6 +65,12 @@ export default function TabLayout() {
         options={{
           title: 'Raporlar',
           tabBarIcon: ({ color }) => <MaterialIcons name="bar-chart" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

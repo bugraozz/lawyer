@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 import apiClient from '../../api/client';
 import { BrutalCard } from '../../components/BrutalCard';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -32,11 +33,11 @@ export default function CasesScreen() {
   };
 
   const filteredCases = cases.filter(c => {
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLocaleLowerCase('tr-TR');
     return (
-      (c.title && c.title.toLowerCase().includes(query)) ||
-      (c.caseNo && c.caseNo.toLowerCase().includes(query)) ||
-      (c.clientName && c.clientName.toLowerCase().includes(query))
+      (c.title && c.title.toLocaleLowerCase('tr-TR').includes(query)) ||
+      (c.caseNo && c.caseNo.toLocaleLowerCase('tr-TR').includes(query)) ||
+      (c.clientName && c.clientName.toLocaleLowerCase('tr-TR').includes(query))
     );
   });
 
@@ -63,7 +64,12 @@ export default function CasesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>DAVALAR</Text>
+        <View style={styles.titleRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
+          </TouchableOpacity>
+          <Text style={styles.title}>DAVALAR</Text>
+        </View>
         <BrutalInput 
           icon="search"
           placeholder="Dava No, Müvekkil veya Başlık Ara..."
@@ -101,11 +107,19 @@ const styles = StyleSheet.create({
     paddingTop: 64,
     paddingBottom: 8,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  backBtn: {
+    padding: 4,
+    marginRight: 12,
+  },
   title: {
     fontFamily: typography.fonts.headline,
     fontSize: typography.sizes.xl,
     color: colors.text.primary,
-    marginBottom: 16,
   },
   listContent: {
     padding: 24,

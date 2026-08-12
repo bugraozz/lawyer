@@ -1,12 +1,18 @@
-import express from 'express';
 import cors from 'cors';
+import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { initDb } from './db';
+import { authenticateToken } from './middleware/auth';
 import authRoutes from './routes/auth';
 
+import { initCronJobs } from './cron/notificationCron';
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+
+// Initialize Cron Jobs
+initCronJobs();
 
 app.use(cors());
 app.use(express.json());
@@ -16,21 +22,21 @@ const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-// Serve uploads statically
-app.use('/uploads', express.static(uploadsDir));
+// Serve uploads securely
+app.use('/uploads', authenticateToken, express.static(uploadsDir));
 
 // Initialize SQLite Database
 initDb();
 
-import dashboardRoutes from './routes/dashboard';
+import adminRoutes from './routes/admin';
 import casesRoutes from './routes/cases';
 import clientsRoutes from './routes/clients';
+import dashboardRoutes from './routes/dashboard';
 import eventsRoutes from './routes/events';
 import expensesRoutes from './routes/expenses';
 import notificationsRoutes from './routes/notifications';
 import profileRoutes from './routes/profile';
 import tasksRoutes from './routes/tasks';
-import { authenticateToken } from './middleware/auth';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', authenticateToken, dashboardRoutes);
@@ -41,11 +47,12 @@ app.use('/api/expenses', authenticateToken, expensesRoutes);
 app.use('/api/notifications', authenticateToken, notificationsRoutes);
 app.use('/api/profile', authenticateToken, profileRoutes);
 app.use('/api/tasks', authenticateToken, tasksRoutes);
+app.use('/api/admin', authenticateToken, adminRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Lex Architect API is running' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });

@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import apiClient from '../api/client';
 import { BrutalCard } from '../components/BrutalCard';
-import { BrutalButton } from '../components/BrutalButton';
-import { StatusBadge } from '../components/StatusBadge';
 import { FAB } from '../components/FAB';
+import { StatusBadge } from '../components/StatusBadge';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 
@@ -87,9 +86,6 @@ export default function ExpensesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <MaterialIcons name="arrow-back" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
         <Text style={styles.title}>MASRAF YÖNETİMİ</Text>
       </View>
 
@@ -119,7 +115,7 @@ export default function ExpensesScreen() {
         />
       )}
 
-      <FAB icon="add" onPress={() => alert('Genel masraf ekleme yapım aşamasındadır. Dava detaylarından masraf ekleyebilirsiniz.')} />
+      <FAB icon="add" onPress={() => router.push('/expenses/add')} />
     </View>
   );
 }
@@ -133,7 +129,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 24,
-    paddingTop: 64,
+    paddingTop: 16,
     paddingBottom: 16,
   },
   backBtn: {

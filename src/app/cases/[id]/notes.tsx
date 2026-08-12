@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Platform } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import apiClient from '../../../api/client';
-import { BrutalCard } from '../../../components/BrutalCard';
-import { StatusBadge } from '../../../components/StatusBadge';
-import { BrutalInput } from '../../../components/BrutalInput';
 import { BrutalButton } from '../../../components/BrutalButton';
-import { FAB } from '../../../components/FAB';
+import { BrutalCard } from '../../../components/BrutalCard';
+import { BrutalInput } from '../../../components/BrutalInput';
+import { BrutalDateInput } from '../../../components/BrutalDateInput';
 import { colors } from '../../../theme/colors';
 import { typography } from '../../../theme/typography';
-import { MaterialIcons } from '@expo/vector-icons';
 
 export default function CaseNotesTasksScreen() {
   const { id } = useLocalSearchParams();
@@ -18,9 +18,15 @@ export default function CaseNotesTasksScreen() {
   const [notes, setNotes] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   
-  const [newItemText, setNewItemText] = useState('');
-
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDate, setTaskDate] = useState('');
+  const [taskPriority, setTaskPriority] = useState('normal');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     loadData();
   }, [id]);
@@ -41,17 +47,29 @@ export default function CaseNotesTasksScreen() {
   };
 
   const handleAdd = async () => {
-    if (!newItemText) return;
     try {
+      setAdding(true);
       if (activeTab === 'notes') {
-        await apiClient.post(`/cases/${id}/notes`, { title: 'Yeni Not', content: newItemText, date: new Date().toLocaleDateString() });
+        if (!noteTitle) return alert('Lütfen not başlığı giriniz.');
+        // SQLite uses YYYY-MM-DD for date filtering/ordering, better to store it as such
+        const today = new Date().toISOString().split('T')[0];
+        await apiClient.post(`/cases/${id}/notes`, { title: noteTitle, content: noteContent, date: today });
+        setNoteTitle('');
+        setNoteContent('');
       } else {
-        await apiClient.post(`/cases/${id}/tasks`, { title: newItemText, date: new Date().toLocaleDateString() });
+        if (!taskTitle) return alert('Lütfen görev başlığı giriniz.');
+        if (!taskDate) return alert('Lütfen görev tarihi giriniz.');
+        await apiClient.post(`/cases/${id}/tasks`, { title: taskTitle, date: taskDate, priority: taskPriority });
+        setTaskTitle('');
+        setTaskDate('');
+        setTaskPriority('normal');
       }
-      setNewItemText('');
       loadData();
     } catch (err) {
       console.error(err);
+      alert('Eklenirken bir hata oluştu.');
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -98,19 +116,98 @@ export default function CaseNotesTasksScreen() {
       </View>
 
       <View style={{ padding: 24, paddingBottom: 0 }}>
-        <BrutalInput 
-          placeholder={activeTab === 'notes' ? "Yeni not ekle..." : "Yeni görev ekle..."} 
-          value={newItemText}
-          onChangeText={setNewItemText}
-          onSubmitEditing={handleAdd}
-        />
-        <BrutalButton title="EKLE" onPress={handleAdd} style={{ marginTop: 8 }} />
+        {activeTab === 'notes' ? (
+          <View style={styles.formContainer}>
+            <BrutalInput 
+              placeholder="Not Başlığı" 
+              value={noteTitle}
+              onChangeText={setNoteTitle}
+            />
+            <BrutalInput 
+              placeholder="Not İçeriği..." 
+              value={noteContent}
+              onChangeText={setNoteContent}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+        ) : (
+          <View style={styles.formContainer}>
+            <BrutalInput 
+              placeholder="Görev Başlığı" 
+              value={taskTitle}
+              onChangeText={setTaskTitle}
+            />
+            
+            <BrutalDateInput
+              icon="event"
+              placeholder="Tarih Seçin"
+              value={taskDate}
+              onPress={() => setShowDatePicker(true)}
+            />
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={taskDate ? new Date(taskDate) : new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowDatePicker(Platform.OS === 'ios');
+                  if (event.type === 'set' && selectedDate) {
+                    // Extract local date in YYYY-MM-DD
+                    const year = selectedDate.getFullYear();
+                    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                    const day = String(selectedDate.getDate()).padStart(2, '0');
+                    setTaskDate(`${year}-${month}-${day}`);
+                  }
+                }}
+              />
+            )}
+
+            <View style={styles.priorityContainer}>
+              {['low', 'normal', 'high'].map(p => (
+                <TouchableOpacity 
+                  key={p} 
+                  onPress={() => setTaskPriority(p)}
+                  style={[
+                    styles.priorityButton, 
+                    taskPriority === p && styles.priorityButtonActive
+                  ]}>
+                  <Text style={[
+                    styles.priorityText, 
+                    taskPriority === p && styles.priorityTextActive
+                  ]}>
+                    {p === 'low' ? 'Düşük' : p === 'normal' ? 'Normal' : 'Yüksek'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+        <BrutalButton title={adding ? "EKLENİYOR..." : "EKLE"} onPress={handleAdd} style={{ marginTop: 8 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={20} color={colors.text.secondary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={activeTab === 'notes' ? 'Not ara...' : 'Görev ara...'}
+            placeholderTextColor={colors.text.secondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="close" size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+
         {activeTab === 'notes' ? (
           <View>
-            {notes.map(note => (
+            {notes.filter(n => !searchQuery || n.title?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR')) || n.content?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR'))).map(note => (
               <BrutalCard key={note.id} style={styles.noteCard}>
                 <View style={styles.noteHeader}>
                   <Text style={styles.noteTitle}>{note.title}</Text>
@@ -122,24 +219,57 @@ export default function CaseNotesTasksScreen() {
                 <Text style={styles.notePreview}>{note.content}</Text>
               </BrutalCard>
             ))}
-            {notes.length === 0 && <Text style={{textAlign: 'center'}}>Not bulunmuyor.</Text>}
+            {notes.filter(n => !searchQuery || n.title?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR')) || n.content?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR'))).length === 0 && <Text style={{textAlign: 'center', color: colors.text.secondary}}>{ searchQuery ? 'Arama kriterine uygun not bulunamadı.' : 'Not bulunmuyor.' }</Text>}
           </View>
         ) : (
           <View>
-            {tasks.map(task => (
+            {tasks.filter(t => !searchQuery || t.title?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR'))).map(task => {
+              const isOverdue = (dateStr?: string) => {
+                if (!dateStr) return false;
+                let dStr = dateStr;
+                if (dStr.includes('.')) {
+                  const parts = dStr.split('.');
+                  if (parts.length === 3) dStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
+                const targetDate = new Date(dStr);
+                targetDate.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return targetDate.getTime() < today.getTime();
+              };
+              const overdue = !task.completed && isOverdue(task.date);
+              return (
               <View key={task.id} style={styles.taskItem}>
                 <TouchableOpacity onPress={() => toggleTask(task)} style={[styles.checkbox, task.completed && styles.checkboxChecked]}>
                   {task.completed ? <MaterialIcons name="check" size={16} color={colors.text.inverse} /> : null}
                 </TouchableOpacity>
                 <View style={styles.taskContent}>
-                  <Text style={[styles.taskTitle, task.completed && styles.taskCompleted]}>{task.title}</Text>
+                  <Text style={[styles.taskTitle, task.completed && styles.taskCompleted, overdue && { color: colors.accent.red }]}>{task.title}</Text>
+                  <View style={styles.taskMetaContainer}>
+                    {task.date ? (
+                      <Text style={[styles.taskMeta, overdue && { color: colors.accent.red, fontWeight: 'bold' }]}>
+                        {task.date} {overdue ? '(Süresi Geçmiş)' : ''}
+                      </Text>
+                    ) : null}
+                    {task.priority && (
+                      <View style={[
+                        styles.taskPriorityBadge, 
+                        task.priority === 'high' ? styles.badgeHigh : task.priority === 'low' ? styles.badgeLow : styles.badgeNormal
+                      ]}>
+                        <Text style={styles.taskPriorityText}>
+                          {task.priority === 'high' ? 'YÜKSEK' : task.priority === 'low' ? 'DÜŞÜK' : 'NORMAL'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 <TouchableOpacity onPress={() => deleteTask(task.id)}>
                   <MaterialIcons name="delete" size={20} color={colors.accent.red} />
                 </TouchableOpacity>
               </View>
-            ))}
-            {tasks.length === 0 && <Text style={{textAlign: 'center'}}>Görev bulunmuyor.</Text>}
+              );
+            })}
+            {tasks.filter(t => !searchQuery || t.title?.toLocaleLowerCase('tr-TR').includes(searchQuery.toLocaleLowerCase('tr-TR'))).length === 0 && <Text style={{textAlign: 'center', color: colors.text.secondary}}>{ searchQuery ? 'Arama kriterine uygun görev bulunamadı.' : 'Görev bulunmuyor.' }</Text>}
           </View>
         )}
       </ScrollView>
@@ -179,6 +309,9 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 100,
+  },
+  formContainer: {
+    marginBottom: 8,
   },
   noteCard: {
     marginBottom: 16,
@@ -239,10 +372,80 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: colors.text.secondary,
   },
+  taskMetaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
   taskMeta: {
     fontFamily: typography.fonts.body,
     fontSize: typography.sizes.sm,
     color: colors.text.secondary,
-    marginTop: 4,
+  },
+  taskPriorityBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  badgeHigh: {
+    backgroundColor: colors.accent.red,
+  },
+  badgeLow: {
+    backgroundColor: colors.accent.green,
+  },
+  badgeNormal: {
+    backgroundColor: colors.surface,
+  },
+  taskPriorityText: {
+    fontFamily: typography.fonts.headline,
+    fontSize: 10,
+    color: colors.text.primary,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 16,
+    marginBottom: 16,
+  },
+  datePickerText: {
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.md,
+    color: colors.text.primary,
+    marginLeft: 12,
+  },
+  datePickerPlaceholder: {
+    color: colors.text.secondary,
+  },
+  priorityContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  priorityButton: {
+    flex: 1,
+    marginHorizontal: 4,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  priorityButtonActive: {
+    backgroundColor: colors.accent.yellow,
+    borderColor: colors.text.primary,
+  },
+  priorityText: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.sm,
+    color: colors.text.primary,
+  },
+  priorityTextActive: {
+    color: colors.text.primary,
   },
 });

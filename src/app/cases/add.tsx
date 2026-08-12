@@ -1,39 +1,40 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
-import apiClient from '../../api/client';
+import { Controller, useForm } from 'react-hook-form';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { BrutalButton } from '../../components/BrutalButton';
 import { BrutalCard } from '../../components/BrutalCard';
 import { BrutalInput } from '../../components/BrutalInput';
-import { BrutalButton } from '../../components/BrutalButton';
+import { useCreateCase } from '../../hooks/useCases';
+import { createCaseSchema } from '../../schemas';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { CreateCaseRequest } from '../../types';
 
 export default function AddCaseScreen() {
   const router = useRouter();
-  const [caseNo, setCaseNo] = useState('');
-  const [title, setTitle] = useState('');
-  const [court, setCourt] = useState('');
-  const [client, setClient] = useState('');
-  const [type, setType] = useState('');
-  const [loading, setLoading] = useState(false);
+  const createCaseMutation = useCreateCase();
 
-  const handleSave = async () => {
-    try {
-      setLoading(true);
-      await apiClient.post('/cases', {
-        caseNo,
-        title,
-        court,
-        clientName: client,
-        type,
-      });
-      router.push('/(tabs)/cases');
-    } catch (error) {
-      console.error('Failed to save case:', error);
-      alert('Dava kaydedilirken bir hata oluştu.');
-    } finally {
-      setLoading(false);
-    }
+  const { control, handleSubmit, formState: { errors } } = useForm<CreateCaseRequest>({
+    resolver: zodResolver(createCaseSchema.shape.body),
+    defaultValues: {
+      caseNo: '',
+      title: '',
+      court: '',
+      type: '',
+    },
+  });
+
+  const onSubmit = (data: CreateCaseRequest) => {
+    createCaseMutation.mutate(data, {
+      onSuccess: () => {
+        router.push('/(tabs)/cases');
+      },
+      onError: (error) => {
+        console.error('Failed to save case:', error);
+        alert('Dava kaydedilirken bir hata oluştu.');
+      }
+    });
   };
 
   return (
@@ -45,47 +46,71 @@ export default function AddCaseScreen() {
         <Text style={styles.title}>YENİ DAVA EKLE</Text>
         
         <BrutalCard style={styles.card}>
-          <BrutalInput 
-            label="Dava No (Esas)" 
-            icon="tag" 
-            placeholder="Örn: 2024/123" 
-            value={caseNo}
-            onChangeText={setCaseNo}
+          <Controller
+            control={control}
+            name="caseNo"
+            render={({ field: { onChange, value } }) => (
+              <BrutalInput 
+                label="Dava No (Esas)" 
+                icon="tag" 
+                placeholder="Örn: 2024/123" 
+                value={value}
+                onChangeText={onChange}
+                error={errors.caseNo?.message}
+              />
+            )}
           />
-          <BrutalInput 
-            label="Dava Başlığı" 
-            icon="title" 
-            placeholder="Örn: Yılmaz vs. Kaya" 
-            value={title}
-            onChangeText={setTitle}
+
+          <Controller
+            control={control}
+            name="title"
+            render={({ field: { onChange, value } }) => (
+              <BrutalInput 
+                label="Dava Başlığı" 
+                icon="title" 
+                placeholder="Örn: Yılmaz vs. Kaya" 
+                value={value}
+                onChangeText={onChange}
+                error={errors.title?.message}
+              />
+            )}
           />
-          <BrutalInput 
-            label="Mahkeme" 
-            icon="account-balance" 
-            placeholder="Örn: İstanbul 3. Asliye Ticaret Mahkemesi" 
-            value={court}
-            onChangeText={setCourt}
+
+          <Controller
+            control={control}
+            name="court"
+            render={({ field: { onChange, value } }) => (
+              <BrutalInput 
+                label="Mahkeme" 
+                icon="account-balance" 
+                placeholder="Örn: İstanbul 3. Asliye Ticaret Mahkemesi" 
+                value={value}
+                onChangeText={onChange}
+                error={errors.court?.message}
+              />
+            )}
           />
-          <BrutalInput 
-            label="Müvekkil" 
-            icon="person" 
-            placeholder="Müvekkil Adı" 
-            value={client}
-            onChangeText={setClient}
-          />
-          <BrutalInput 
-            label="Dava Türü" 
-            icon="category" 
-            placeholder="Örn: Ticaret, İş, İcra" 
-            value={type}
-            onChangeText={setType}
+
+          <Controller
+            control={control}
+            name="type"
+            render={({ field: { onChange, value } }) => (
+              <BrutalInput 
+                label="Dava Türü" 
+                icon="category" 
+                placeholder="Örn: Ticaret, İş, İcra" 
+                value={value}
+                onChangeText={onChange}
+                error={errors.type?.message}
+              />
+            )}
           />
 
           <BrutalButton 
-            title={loading ? "KAYDEDİLİYOR..." : "DAVAYI KAYDET"} 
+            title={createCaseMutation.isPending ? "KAYDEDİLİYOR..." : "DAVAYI KAYDET"} 
             fullWidth 
             style={styles.btn} 
-            onPress={handleSave} 
+            onPress={handleSubmit(onSubmit)} 
           />
         </BrutalCard>
       </ScrollView>

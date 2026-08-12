@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import apiClient from '../../api/client';
 import { BrutalCard } from '../../components/BrutalCard';
 import { BrutalInput } from '../../components/BrutalInput';
+import { BrutalDateInput } from '../../components/BrutalDateInput';
 import { BrutalButton } from '../../components/BrutalButton';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -18,6 +20,8 @@ export default function AddEventScreen() {
   const [type, setType] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -56,20 +60,62 @@ export default function AddEventScreen() {
             value={title}
             onChangeText={setTitle}
           />
-          <BrutalInput 
-            label="Tarih" 
-            icon="event" 
-            placeholder="YYYY-AA-GG (Örn: 2026-06-15)" 
+
+          <BrutalDateInput
+            label="Tarih"
+            icon="event"
+            placeholder="Tarih Seçin"
             value={date}
-            onChangeText={setDate}
+            onPress={() => setShowDatePicker(true)}
           />
-          <BrutalInput 
-            label="Saat" 
-            icon="schedule" 
-            placeholder="SS:DD (Örn: 14:00)" 
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={date ? new Date(date) : new Date()}
+              mode="date"
+              display="default"
+              onChange={(event, selectedDate) => {
+                setShowDatePicker(Platform.OS === 'ios');
+                if (event.type === 'set' && selectedDate) {
+                  const year = selectedDate.getFullYear();
+                  const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                  const day = String(selectedDate.getDate()).padStart(2, '0');
+                  setDate(`${year}-${month}-${day}`);
+                }
+              }}
+            />
+          )}
+
+          <BrutalDateInput
+            label="Saat"
+            icon="schedule"
+            placeholder="Saat Seçin"
             value={time}
-            onChangeText={setTime}
+            onPress={() => setShowTimePicker(true)}
           />
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={time ? (() => {
+                const d = new Date();
+                const [h, m] = time.split(':');
+                d.setHours(Number(h), Number(m));
+                return d;
+              })() : new Date()}
+              mode="time"
+              is24Hour={true}
+              display="spinner"
+              onChange={(event, selectedDate) => {
+                setShowTimePicker(Platform.OS === 'ios');
+                if (event.type === 'set' && selectedDate) {
+                  const hours = String(selectedDate.getHours()).padStart(2, '0');
+                  const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+                  setTime(`${hours}:${minutes}`);
+                }
+              }}
+            />
+          )}
+
           <BrutalInput 
             label="Tür" 
             icon="category" 
@@ -118,5 +164,24 @@ const styles = StyleSheet.create({
   },
   btn: {
     marginTop: 16,
+  },
+  label: {
+    fontFamily: typography.fonts.headline,
+    fontSize: typography.sizes.sm,
+    color: colors.text.secondary,
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  pickerButton: {
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 16,
+    marginBottom: 16,
+  },
+  pickerButtonText: {
+    fontFamily: typography.fonts.body,
+    fontSize: typography.sizes.md,
+    color: colors.text.primary,
   },
 });
